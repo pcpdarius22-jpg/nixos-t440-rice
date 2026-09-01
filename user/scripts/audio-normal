@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+CFG="${XDG_CONFIG_HOME:-$HOME/.config}/rice/audio.env"
+if [ -r "$CFG" ]; then
+  # shellcheck disable=SC1090
+  . "$CFG"
+fi
+rate="${RICE_AUDIO_RATE:-48000}"
+studio="${RICE_STUDIO_QUANTUM:-512}"
+safe="${RICE_SAFE_QUANTUM:-1024}"
+pw-metadata -n settings 0 clock.force-quantum 0 >/dev/null
+notify-send "Audio" "normal graph; configured ${rate} Hz / ${studio} studio / ${safe} safe"

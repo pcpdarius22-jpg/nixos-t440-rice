@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -u
+
+LOG="${XDG_CACHE_HOME:-$HOME/.cache}/rice-flatpak-bootstrap.log"
+mkdir -p "$(dirname "$LOG")" "$HOME/Games"
+
+{
+  echo "[$(date -Is)] Flatpak v12 RC7 bootstrap"
+
+  flatpak remote-add --user --if-not-exists \
+    flathub https://dl.flathub.org/repo/flathub.flatpakrepo || exit 10
+
+  if ! flatpak info --user org.libretro.RetroArch >/dev/null 2>&1; then
+    flatpak install --user --noninteractive -y flathub org.libretro.RetroArch || exit 11
+  fi
+
+  # RetroArch's Flathub manifest can expose broad host filesystem access. Undo
+  # it at user override level and expose only the intended ROM directory.
+  flatpak override --user --nofilesystem=host org.libretro.RetroArch || true
+  flatpak override --user --filesystem="$HOME/Games:create" org.libretro.RetroArch || true
+
+  echo "[$(date -Is)] Flatpak ready"
+} >>"$LOG" 2>&1
+rc=$?
+
+if [ "$rc" -eq 0 ]; then
+  notify-send "Flatpak ready" "Flathub and RetroArch are configured."
+  exit 0
+fi
+
+notify-send "Flatpak setup incomplete" "Check $LOG and run flatpak-bootstrap again."
+exit 0

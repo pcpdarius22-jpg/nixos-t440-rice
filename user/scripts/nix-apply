@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+find_repo() {
+  [ -n "${NIXOS_CONFIG_DIR:-}" ] && [ -f "$NIXOS_CONFIG_DIR/flake.nix" ] && { printf '%s\n' "$NIXOS_CONFIG_DIR"; return; }
+  [ -f "$PWD/flake.nix" ] && { printf '%s\n' "$PWD"; return; }
+  [ -f "$HOME/nixos-config/flake.nix" ] && { printf '%s\n' "$HOME/nixos-config"; return; }
+  return 1
+}
+DIR="$(find_repo)" || { echo 'Cannot find config; cd into ~/nixos-config or set NIXOS_CONFIG_DIR.' >&2; exit 1; }
+REF="path:$DIR#thinkpad"
+
+nix flake check "path:$DIR"
+sudo nixos-rebuild switch --flake "$REF"
+printf '\nNew generation is active and is now the boot default. Running runtime checks...\n'
+rice-doctor

@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# 9front/rio-inspired on-demand window watch. No resident taskbar: enumerate
+# Sway toplevels only when requested, choose with square Fuzzel, then focus or
+# restore the exact container.
+tree="$(swaymsg -t get_tree -r)"
+entries="$(jq -r '
+  .. | objects
+  | select(.type? == "con")
+  | select(((.app_id? // "") != "") or ((.window? // 0) != 0))
+  | [(.id | tostring), (([.name, .app_id, .window_properties.class]
+      | map(select(. != null and . != ""))
+      | .[0] // "window") | gsub("[\t\r\n]"; " "))]
+  | @tsv
+' <<<"$tree")"
+
+if [ -z "$entries" ]; then
+  notify-send "windows" "No application windows are open."
+  exit 0
+fi
+
+id="$(printf '%s\n' "$entries" | fuzzel --dmenu \
+  --config "$HOME/.config/rice/generated/fuzzel.ini" \
+  --with-nth=2.. --accept-nth=1 \
+  --cache "$HOME/.cache/fuzzel-windows" || true)"
+
+[[ "$id" =~ ^[0-9]+$ ]] || exit 0
+
+read -r scratch visible < <(jq -r --argjson id "$id" '
+  first(.. | objects | select(.id? == $id))
+  | "\(.scratchpad_state // "none") \(.visible // false)"
+' <<<"$tree")
+
+if [ "$scratch" != "none" ] && [ "$visible" != "true" ]; then
+  swaymsg "[con_id=$id] scratchpad show" >/dev/null
+fi
+swaymsg "[con_id=$id] focus" >/dev/null

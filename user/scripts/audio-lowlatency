@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+CFG="${XDG_CONFIG_HOME:-$HOME/.config}/rice/audio.env"
+[ -r "$CFG" ] || { echo "missing $CFG; rebuild/activate the rice first" >&2; exit 1; }
+# shellcheck disable=SC1090
+. "$CFG"
+pw-metadata -n settings 0 clock.force-quantum "$RICE_STUDIO_QUANTUM"
+printf 'PipeWire forced to %s-frame studio quantum at %s Hz.\n' "$RICE_STUDIO_QUANTUM" "$RICE_AUDIO_RATE"

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+mapfile -t files < <(find "$HOME/Pictures" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) 2>/dev/null | sort)
+[ "${#files[@]}" -gt 0 ] || { notify-send "Wallpaper" "No images in ~/Pictures"; exit 0; }
+choice="$(printf '%s\n' "${files[@]}" | fuzzel --dmenu --config "$HOME/.config/rice/generated/fuzzel.ini" --prompt='wallpaper > ')"
+[ -n "$choice" ] || exit 0
+exec set-wallpaper "$choice"

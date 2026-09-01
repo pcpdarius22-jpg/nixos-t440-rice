@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if footclient -N "$@"; then exit 0; fi
+exec foot "$@"

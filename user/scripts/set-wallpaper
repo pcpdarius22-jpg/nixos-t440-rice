@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+[ $# -eq 1 ] || { echo "usage: set-wallpaper /path/to/image" >&2; exit 2; }
+exec theme-sync --set "$1"

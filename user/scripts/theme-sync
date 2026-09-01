@@ -1,0 +1,403 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+RICE="$CONFIG_HOME/rice"
+GEN="$RICE/generated"
+DATA="$DATA_HOME/rice"
+REF="${RICE_REFERENCE_WALLPAPER:-$RICE/reference/reference.png}"
+WALL="$DATA/wallpaper.jpg"
+SEED="$DATA/.v12-reference-seeded"
+
+mkdir -p "$GEN" "$DATA" "$CONFIG_HOME/foot" "$CONFIG_HOME/zathura" "$RICE/yazi" "$RICE/waybar"
+
+normalize_to_wall() {
+  local src="$1" tmp
+  [ -f "$src" ] || { echo "not a file: $src" >&2; exit 1; }
+  tmp="$(mktemp "$DATA/.wallpaper.XXXXXX.jpg")"
+  magick "$src" -auto-orient -strip -quality 94 "$tmp"
+  mv -f -- "$tmp" "$WALL"
+}
+
+mode="${1:-}"
+case "$mode" in
+  --set)
+    [ $# -eq 2 ] || { echo "usage: theme-sync --set /path/to/image" >&2; exit 2; }
+    normalize_to_wall "$2"
+    touch "$SEED"
+    ;;
+  --reset-reference)
+    normalize_to_wall "$REF"
+    touch "$SEED"
+    ;;
+  --activation|--startup|"")
+    if [ ! -e "$SEED" ]; then
+      normalize_to_wall "$REF"
+      touch "$SEED"
+    elif [ ! -s "$WALL" ]; then
+      normalize_to_wall "$REF"
+    fi
+    ;;
+  *)
+    echo "usage: theme-sync [--startup|--activation|--reset-reference|--set FILE]" >&2
+    exit 2
+    ;;
+esac
+
+# Strict monochrome host UI. The rice itself uses only true black, white and
+# neutral grays. Wallpaper and real content (web media, photos, video, games,
+# album art) are never recolored.
+BG="#000000"
+FG="#e8e8e8"
+DIM="#808080"
+MID="#b8b8b8"
+SEL="#303030"
+HI="#ffffff"
+INV="#ffffff"
+
+cat > "$GEN/palette.sh" <<PAL
+BG='$BG'
+FG='$FG'
+ACCENT='$SEL'
+ACCENT2='$MID'
+URGENT='$HI'
+MUTED='$DIM'
+PAL
+cat > "$GEN/palette.json" <<PALJSON
+{"bg":"$BG","fg":"$FG","accent":"$SEL","accent2":"$MID","urgent":"$HI","muted":"$DIM"}
+PALJSON
+
+cat > "$GEN/sway-colors.conf" <<SWAY
+client.focused          $BG $BG $FG $BG $BG
+client.focused_inactive $BG $BG $DIM $BG $BG
+client.unfocused        $BG $BG $DIM $BG $BG
+client.urgent           $HI $HI $BG $HI $HI
+client.placeholder      $BG $BG $DIM $BG $BG
+client.background       $BG
+SWAY
+
+strip() { printf '%s' "${1#\#}"; }
+cat > "$CONFIG_HOME/foot/foot.ini.tmp" <<FOOT
+[main]
+term=foot
+font=PxPlus IBM VGA 8x16:size=10
+dpi-aware=no
+pad=6x6
+
+[scrollback]
+lines=10000
+
+[mouse]
+hide-when-typing=yes
+
+[colors-dark]
+background=$(strip "$BG")
+foreground=$(strip "$FG")
+regular0=000000
+regular1=707070
+regular2=909090
+regular3=a0a0a0
+regular4=808080
+regular5=b0b0b0
+regular6=c0c0c0
+regular7=e8e8e8
+bright0=555555
+bright1=888888
+bright2=aaaaaa
+bright3=b0b0b0
+bright4=999999
+bright5=cccccc
+bright6=dddddd
+bright7=ffffff
+FOOT
+mv -f "$CONFIG_HOME/foot/foot.ini.tmp" "$CONFIG_HOME/foot/foot.ini"
+
+# Do not apply page-wide filters. Only selection follows the rice; images,
+# videos, canvas, SVG and site-defined colors remain exactly as the website made them.
+cat > "$GEN/web.css" <<WEB
+::selection { background: $SEL !important; color: $FG !important; }
+WEB
+
+cat > "$GEN/qute-colors.py" <<QUTE
+c.colors.webpage.bg = '$BG'
+c.colors.tabs.bar.bg = '$BG'
+c.colors.tabs.even.bg = '$BG'
+c.colors.tabs.odd.bg = '$BG'
+c.colors.tabs.even.fg = '$MID'
+c.colors.tabs.odd.fg = '$MID'
+c.colors.tabs.selected.even.bg = '$SEL'
+c.colors.tabs.selected.odd.bg = '$SEL'
+c.colors.tabs.selected.even.fg = '$FG'
+c.colors.tabs.selected.odd.fg = '$FG'
+c.colors.tabs.indicator.start = '$SEL'
+c.colors.tabs.indicator.stop = '$MID'
+c.colors.statusbar.normal.bg = '$BG'
+c.colors.statusbar.normal.fg = '$FG'
+c.colors.statusbar.command.bg = '$BG'
+c.colors.statusbar.command.fg = '$FG'
+c.colors.statusbar.insert.bg = '$SEL'
+c.colors.statusbar.insert.fg = '$FG'
+c.colors.statusbar.url.fg = '$MID'
+c.colors.statusbar.url.success.http.fg = '$FG'
+c.colors.statusbar.url.success.https.fg = '$FG'
+c.colors.statusbar.progress.bg = '$SEL'
+c.colors.completion.fg = '$FG'
+c.colors.completion.odd.bg = '$BG'
+c.colors.completion.even.bg = '$BG'
+c.colors.completion.category.bg = '$BG'
+c.colors.completion.category.fg = '$MID'
+c.colors.completion.item.selected.bg = '$SEL'
+c.colors.completion.item.selected.fg = '$FG'
+c.colors.hints.bg = '$SEL'
+c.colors.hints.fg = '$FG'
+QUTE
+
+cat > "$GEN/nvim-colors.lua" <<NVIM
+local set = vim.api.nvim_set_hl
+local bg='$BG'; local fg='$FG'; local dim='$DIM'; local mid='$MID'; local sel='$SEL'; local hi='$HI'
+set(0, 'Normal',       { fg=fg, bg=bg })
+set(0, 'NormalFloat',  { fg=fg, bg=bg })
+set(0, 'LineNr',       { fg=dim, bg=bg })
+set(0, 'CursorLineNr', { fg=fg, bg=bg, bold=true })
+set(0, 'Visual',       { fg=fg, bg=sel })
+set(0, 'Search',       { fg=fg, bg=sel })
+set(0, 'Comment',      { fg=dim, bg=bg, italic=true })
+for _,g in ipairs({'String','Number','Boolean','Identifier','Statement','Type','PreProc','Constant','Function','Keyword'}) do
+  set(0, g, { fg=fg, bg=bg })
+end
+set(0, 'StatusLine',   { fg=fg, bg=sel })
+set(0, 'StatusLineNC', { fg=dim, bg=bg })
+NVIM
+
+
+cat > "$GEN/dunstrc" <<DUNST
+[global]
+    monitor = 0
+    follow = keyboard
+    width = (170, 340)
+    height = (0, 110)
+    origin = top-center
+    offset = (0, 22)
+    notification_limit = 4
+    font = PxPlus IBM VGA 8x16 10
+    frame_width = 0
+    separator_height = 0
+    padding = 7
+    horizontal_padding = 7
+    text_icon_padding = 0
+    corner_radius = 0
+    icon_position = off
+    markup = full
+    format = <b>%s</b>\n%b
+    sort = yes
+    idle_threshold = 120
+
+[urgency_low]
+    background = "$BG"
+    foreground = "$MID"
+    timeout = 3
+[urgency_normal]
+    background = "$BG"
+    foreground = "$FG"
+    timeout = 5
+[urgency_critical]
+    background = "$HI"
+    foreground = "$BG"
+    timeout = 0
+DUNST
+
+cat > "$GEN/fuzzel.ini" <<FUZZEL
+[main]
+font=PxPlus IBM VGA 8x16:size=10
+width=34
+lines=10
+horizontal-pad=8
+vertical-pad=8
+inner-pad=4
+icons-enabled=no
+terminal=rice-foot
+
+[border]
+width=0
+radius=0
+selection-radius=0
+
+[colors]
+background=000000f5
+text=e8e8e8ff
+match=b8b8b8ff
+selection=303030ff
+selection-text=e8e8e8ff
+border=000000ff
+FUZZEL
+
+cat > "$CONFIG_HOME/zathura/zathurarc.tmp" <<ZATHURA
+set selection-clipboard clipboard
+set recolor false
+# Document content stays original/full-color; only viewer chrome follows the rice.
+set default-bg "$BG"
+set default-fg "$FG"
+set statusbar-bg "$BG"
+set statusbar-fg "$FG"
+set inputbar-bg "$BG"
+set inputbar-fg "$FG"
+set highlight-color "$SEL"
+set highlight-active-color "$MID"
+ZATHURA
+mv -f "$CONFIG_HOME/zathura/zathurarc.tmp" "$CONFIG_HOME/zathura/zathurarc"
+
+cat > "$RICE/yazi/theme.toml" <<YAZI
+[app]
+overall = { bg = "$BG" }
+[mgr]
+cwd = { fg = "$FG" }
+find_keyword = { fg = "$FG", bg = "$SEL" }
+find_position = { fg = "$MID" }
+marker_copied = { fg = "$FG" }
+marker_cut = { fg = "$FG" }
+marker_selected = { fg = "$FG" }
+border_style = { fg = "$BG" }
+[tabs]
+active = { fg = "$FG", bg = "$SEL" }
+inactive = { fg = "$MID", bg = "$BG" }
+[status]
+overall = { fg = "$FG", bg = "$BG" }
+perm_type = { fg = "$FG" }
+perm_read = { fg = "$FG" }
+perm_write = { fg = "$FG" }
+perm_exec = { fg = "$FG" }
+perm_sep = { fg = "$DIM" }
+progress_label = { fg = "$FG", bg = "$SEL" }
+progress_normal = { fg = "$FG", bg = "$DIM" }
+progress_error = { fg = "$FG", bg = "$DIM" }
+[input]
+border = { fg = "$BG" }
+title = { fg = "$FG" }
+value = { fg = "$FG" }
+selected = { fg = "$FG", bg = "$SEL" }
+[cmp]
+border = { fg = "$BG" }
+active = { fg = "$FG", bg = "$SEL" }
+inactive = { fg = "$FG" }
+[which]
+mask = { bg = "$BG" }
+cand = { fg = "$FG" }
+rest = { fg = "$DIM" }
+desc = { fg = "$FG" }
+[help]
+on = { fg = "$FG" }
+run = { fg = "$FG" }
+desc = { fg = "$FG" }
+hovered = { fg = "$FG", bg = "$SEL" }
+footer = { fg = "$DIM", bg = "$BG" }
+YAZI
+
+# Native Wayland edge text: same sparse original-rice clock/status geometry.
+# Status polling is 5s instead of 2s; visually identical with less process churn.
+cat > "$RICE/waybar/config.json" <<WAYBAR
+[
+  {
+    "name": "rice-top",
+    "layer": "top",
+    "position": "top",
+    "height": 21,
+    "exclusive": false,
+    "passthrough": true,
+    "spacing": 0,
+    "modules-left": ["clock"],
+    "clock": { "format": "{:%a %b %d %H:%M:%S}", "interval": 1, "tooltip": false }
+  },
+  {
+    "name": "rice-bottom",
+    "layer": "top",
+    "position": "bottom",
+    "height": 21,
+    "exclusive": false,
+    "passthrough": true,
+    "spacing": 0,
+    "modules-right": ["custom/rice-status"],
+    "custom/rice-status": { "exec": "$HOME/.local/bin/rice-status", "interval": 5, "tooltip": false }
+  }
+]
+WAYBAR
+cat > "$RICE/waybar/style.css" <<CSS
+* {
+  font-family: "PxPlus IBM VGA 8x16";
+  font-size: 15px;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  text-shadow: none;
+}
+window#waybar {
+  background: transparent;
+  color: $FG;
+}
+#clock, #custom-rice-status {
+  background: #000000;
+  color: $FG;
+  margin: 1px 5px;
+  padding: 1px 4px;
+  border-radius: 0;
+}
+CSS
+
+# GTK invariant: square corners at every host widget layer we control.
+# Flatpaks keep their own sandbox/theme data; we do not grant a global config
+# filesystem permission just to make sandboxed apps match the rice.
+mkdir -p "$CONFIG_HOME/gtk-3.0" "$CONFIG_HOME/gtk-4.0"
+for css in "$CONFIG_HOME/gtk-3.0/gtk.css" "$CONFIG_HOME/gtk-4.0/gtk.css"; do
+  cat > "$css.tmp" <<GTK
+@define-color theme_bg_color $BG;
+@define-color theme_fg_color $FG;
+@define-color theme_base_color $BG;
+@define-color theme_text_color $FG;
+@define-color theme_selected_bg_color $SEL;
+@define-color theme_selected_fg_color $FG;
+* { border-radius: 0; }
+window, dialog, popover, menu, tooltip, .background { background-color: $BG; color: $FG; border-radius: 0; }
+headerbar, .titlebar { background-color: $BG; color: $FG; border: 0; border-radius: 0; box-shadow: none; }
+entry, button, list, row, treeview, textview, spinbutton, combobox, notebook, tab { background-color: $BG; color: $FG; border-color: $DIM; border-radius: 0; box-shadow: none; }
+decoration { border: 0; border-radius: 0; box-shadow: none; }
+selection, *:selected { background-color: $SEL; color: $FG; }
+GTK
+  mv -f "$css.tmp" "$css"
+done
+
+# LXQt PolicyKit is Qt6, so give its tiny authentication dialog the same hard
+# square treatment without installing a whole Qt theming framework.
+cat > "$RICE/qt-square.qss" <<QSS
+QWidget, QDialog, QMessageBox, QFrame, QGroupBox, QTabWidget, QTabBar::tab,
+QPushButton, QToolButton, QLineEdit, QTextEdit, QPlainTextEdit, QComboBox,
+QSpinBox, QDoubleSpinBox, QListView, QTreeView, QTableView {
+  background: #000000;
+  color: #e8e8e8;
+  border-color: #808080;
+  border-radius: 0px;
+}
+QPushButton:focus, QPushButton:hover, QToolButton:focus, QToolButton:hover,
+QTabBar::tab:selected, QLineEdit:focus, QComboBox:focus {
+  background: #303030;
+  color: #ffffff;
+}
+QSS
+
+if command -v foot >/dev/null 2>&1; then foot -C -c "$CONFIG_HOME/foot/foot.ini" >/dev/null; fi
+
+if [ "$mode" != "--activation" ] && [ "$mode" != "--startup" ]; then
+  if [ -n "${SWAYSOCK:-}" ]; then
+    swaymsg output '*' bg "$WALL" fill >/dev/null 2>&1 || true
+    swaymsg reload >/dev/null 2>&1 || true
+  fi
+  dunstctl reload >/dev/null 2>&1 || true
+  if command -v socat >/dev/null 2>&1; then
+    hash="$(printf '%s' "$USER" | md5sum | cut -d' ' -f1)"
+    socket="${XDG_RUNTIME_DIR:-/run/user/$UID}/qutebrowser/ipc-$hash"
+    if [ -S "$socket" ]; then
+      printf '%s\n' '{"args":[":config-source"],"target_arg":null,"protocol_version":1}' | socat -lf /dev/null - UNIX-CONNECT:"$socket" >/dev/null 2>&1 || true
+    fi
+  fi
+fi

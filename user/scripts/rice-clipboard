@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "${1:-pick}" in
+  pick)
+    choice="$(cliphist list | fuzzel --dmenu \
+      --config "$HOME/.config/rice/generated/fuzzel.ini" \
+      --prompt='clipboard > ' || true)"
+    [ -n "$choice" ] || exit 0
+    printf '%s\n' "$choice" | cliphist decode | wl-copy
+    ;;
+  wipe)
+    cliphist wipe
+    notify-send 'clipboard' 'history cleared'
+    ;;
+  *)
+    echo 'usage: rice-clipboard [pick|wipe]' >&2
+    exit 2
+    ;;
+esac

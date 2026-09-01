@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+DIR="${NIXOS_CONFIG_DIR:-$HOME/nixos-config}"
+[ -f "$DIR/flake.nix" ] || { echo "No flake at $DIR" >&2; exit 1; }
+cd "$DIR"
+if [ -d .git ] && git remote get-url origin >/dev/null 2>&1; then
+  git pull --ff-only
+else
+  echo 'No Git remote configured; keeping the local config as-is.'
+fi
+nix flake check "path:$DIR"
+sudo nixos-rebuild test --flake "path:$DIR#thinkpad"
+rice-doctor

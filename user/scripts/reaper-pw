@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+CFG="${XDG_CONFIG_HOME:-$HOME/.config}/rice/audio.env"
+[ -r "$CFG" ] || { echo "missing $CFG; rebuild/activate the rice first" >&2; exit 1; }
+# shellcheck disable=SC1090
+. "$CFG"
+q="${RICE_AUDIO_QUANTUM:-$RICE_STUDIO_QUANTUM}"
+case "$q" in
+  "$RICE_STUDIO_QUANTUM"|"$RICE_SAFE_QUANTUM") ;;
+  *) echo "RICE_AUDIO_QUANTUM must be $RICE_STUDIO_QUANTUM or $RICE_SAFE_QUANTUM" >&2; exit 2 ;;
+esac
+
+# Force the graph quantum for the session and also tell PipeWire/JACK clients
+# what REAPER wants. Restore the normal configured quantum when REAPER exits.
+pw-metadata -n settings 0 clock.force-quantum "$q" >/dev/null
+export PIPEWIRE_LATENCY="$q/$RICE_AUDIO_RATE"
+cleanup() { pw-metadata -n settings 0 clock.force-quantum 0 >/dev/null 2>&1 || true; }
+trap cleanup EXIT INT TERM
+reaper "$@"

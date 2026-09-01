@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+QSS="${XDG_CONFIG_HOME:-$HOME/.config}/rice/qt-square.qss"
+agent="${LXQT_POLICYKIT_AGENT_BIN:-/run/current-system/sw/bin/lxqt-policykit-agent}"
+
+if [ ! -x "$agent" ]; then
+  agent="$(command -v lxqt-policykit-agent 2>/dev/null || true)"
+fi
+[ -n "$agent" ] && [ -x "$agent" ] || {
+  echo "lxqt-policykit-agent not found" >&2
+  exit 127
+}
+
+# -stylesheet is handled by QApplication before lxqt-policykit sees argv.
+if [ -s "$QSS" ]; then
+  exec "$agent" -stylesheet "$QSS"
+fi
+exec "$agent"

@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ws="$(swaymsg -t get_workspaces -r 2>/dev/null | jq -r '.[] | select(.focused) | .num' | head -1)"
+[ -n "$ws" ] || ws='?'
+
+# T440 can have BAT0 + BAT1 with different capacities. Weight by real stored
+# energy when *all* present batteries expose energy units, otherwise use charge
+# units when all expose those. This avoids silently dropping a battery on mixed
+# sysfs implementations. Capacity percentages are the final fallback.
+sum_now=0
+sum_full=0
+sum_charge_now=0
+sum_charge_full=0
+energy_count=0
+charge_count=0
+bat_count=0
+cap_sum=0
+cap_count=0
+power_supply_dir="${RICE_POWER_SUPPLY_DIR:-/sys/class/power_supply}"
+
+for b in "$power_supply_dir"/BAT*; do
+  [ -d "$b" ] || continue
+  bat_count=$((bat_count + 1))
+
+  if [ -r "$b/energy_now" ] && [ -r "$b/energy_full" ]; then
+    n="$(cat "$b/energy_now")"
+    f="$(cat "$b/energy_full")"
+    if [[ "$n" =~ ^[0-9]+$ && "$f" =~ ^[0-9]+$ ]]; then
+      sum_now=$((sum_now + n))
+      sum_full=$((sum_full + f))
+      energy_count=$((energy_count + 1))
+    fi
+  fi
+
+  if [ -r "$b/charge_now" ] && [ -r "$b/charge_full" ]; then
+    n="$(cat "$b/charge_now")"
+    f="$(cat "$b/charge_full")"
+    if [[ "$n" =~ ^[0-9]+$ && "$f" =~ ^[0-9]+$ ]]; then
+      sum_charge_now=$((sum_charge_now + n))
+      sum_charge_full=$((sum_charge_full + f))
+      charge_count=$((charge_count + 1))
+    fi
+  fi
+
+  if [ -r "$b/capacity" ]; then
+    c="$(cat "$b/capacity")"
+    if [[ "$c" =~ ^[0-9]+$ ]]; then
+      cap_sum=$((cap_sum + c))
+      cap_count=$((cap_count + 1))
+    fi
+  fi
+done
+
+if [ "$bat_count" -gt 0 ] && [ "$energy_count" -eq "$bat_count" ] && [ "$sum_full" -gt 0 ]; then
+  bat=$(( (100 * sum_now + sum_full / 2) / sum_full ))
+elif [ "$bat_count" -gt 0 ] && [ "$charge_count" -eq "$bat_count" ] && [ "$sum_charge_full" -gt 0 ]; then
+  bat=$(( (100 * sum_charge_now + sum_charge_full / 2) / sum_charge_full ))
+elif [ "$cap_count" -gt 0 ]; then
+  bat=$(( (cap_sum + cap_count / 2) / cap_count ))
+else
+  bat='--'
+fi
+
+read -r used total < <(free -m | awk '/^Mem:/ {printf "%.1f %.1f\n", $3/1024, $2/1024}')
+printf '%s  bat %s%%  mem %s/%sG\n' "$ws" "$bat" "$used" "$total"

@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+[ -s "$HOME/.config/rice/generated/palette.sh" ] || theme-sync --startup >/dev/null
+
+# Original rice edge text: one transparent Waybar process creates only the tiny
+# top-left clock and bottom-right workspace/battery/RAM line. No space reserved.
+pkill -x waybar 2>/dev/null || true
+systemctl --user import-environment \
+  WAYLAND_DISPLAY DISPLAY SWAYSOCK XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE \
+  >/dev/null 2>&1 || true
+
+# These are also wanted by sway-session.target. Explicit starts make live
+# `nixos-rebuild test` work even if the target was already active beforehand.
+for unit in \
+  rice-polkit-agent.service \
+  rice-window-placement.service \
+  rice-cliphist-text.service
+ do
+  systemctl --user start "$unit" >/dev/null 2>&1 || true
+done
+
+systemctl --user restart dunst.service >/dev/null 2>&1 || true
+waybar -c "$HOME/.config/rice/waybar/config.json" -s "$HOME/.config/rice/waybar/style.css" \
+  >/tmp/rice-waybar.log 2>&1 &

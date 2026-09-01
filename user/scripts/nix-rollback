@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'Switching to the previous NixOS generation...\n'
+sudo nixos-rebuild switch --rollback
+printf 'Rolled back. Reboot if you also want to confirm the previous boot generation.\n'

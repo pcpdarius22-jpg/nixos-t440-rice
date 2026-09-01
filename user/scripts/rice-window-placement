@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# RC7: art-directed Sway placement, not randomness.
+#
+# The bundled 1600x900 painting is treated as a canvas. Known utility windows
+# occupy fixed corner zones and leave the visual centre open. Content-heavy
+# apps get dedicated workspaces and fullscreen. Dialogs and DAW plugin windows
+# keep the size requested by the client and are centred on their current
+# workspace, so the compositor never stretches a plugin just to fit the rice.
+#
+# Workspace map:
+#   1  canvas   Foot / Yazi / Neovim / htop
+#   2  web      qutebrowser
+#   3  studio   REAPER
+#   4  media    RetroArch / mpv / imv / Zathura
+#   5  system   nmtui / pulsemixer / Blueman / rice-fetch / optional qpwgraph
+
+query_window() {
+  local id="$1"
+  swaymsg -t get_tree -r 2>/dev/null | jq -cer --argjson id "$id" '
+    first(.. | objects | select(.id? == $id))
+    | {
+        app: (.app_id // ""),
+        cls: (.window_properties.class // ""),
+        name: (.name // ""),
+        transient: (.window_properties.transient_for // null),
+        wtype: (.window_properties.window_type // ""),
+        width: (.rect.width // .geometry.width // 0),
+        height: (.rect.height // .geometry.height // 0)
+      }
+  ' 2>/dev/null
+}
+
+child_or_dialog() {
+  local json="$1" transient wtype
+  transient="$(jq -r '.transient // empty' <<<"$json")"
+  wtype="$(jq -r '.wtype // ""' <<<"$json")"
+  [ -n "$transient" ] && return 0
+  case "$wtype" in
+    dialog|utility|toolbar|splash|menu|dropdown_menu|popup_menu|tooltip|notification|combo|dnd) return 0 ;;
+  esac
+  return 1
+}
+
+# Print workspace number for fullscreen content windows.
+main_workspace() {
+  local app="$1" cls="$2" name="$3"
+  case "$app" in
+    *qutebrowser*) printf '2\n'; return 0 ;;
+    org.libretro.RetroArch|mpv|imv|org.pwmt.zathura) printf '4\n'; return 0 ;;
+  esac
+  case "$cls" in
+    RetroArch|mpv|imv|Zathura) printf '4\n'; return 0 ;;
+  esac
+
+  # REAPER child/plugin windows commonly share class REAPER. Only a title that
+  # looks like the actual project/main window is promoted to the studio.
+  if [[ "$name" =~ (^|[[:space:]-])REAPER([[:space:]]v|$) ]]; then
+    printf '3\n'
+    return 0
+  fi
+  return 1
+}
+
+# Print: WORKSPACE BASE_X BASE_Y BASE_W BASE_H
+# Coordinates are authored for the T440's 1600x900 panel and scaled on any
+# other output. Workspace 1 deliberately leaves the centre of the painting
+# unobstructed.
+utility_geometry() {
+  local key="$1"
+  case "$key" in
+    *yazi*)                 printf '1 70 165 575 330\n' ;;
+    *editor*|*nvim*)        printf '1 1010 90 510 350\n' ;;
+    *htop*)                 printf '1 950 520 570 310\n' ;;
+    *qute-editor*)          printf '2 500 205 600 470\n' ;;
+    *nmtui*|*network*)      printf '5 80 120 560 360\n' ;;
+    *blueman*)              printf '5 990 110 520 420\n' ;;
+    *policykit*)            printf '0 550 310 500 280\n' ;;
+    *qpwgraph*)             printf '5 350 150 900 600\n' ;;
+    *audio*|*pulsemix*)     printf '5 990 520 520 300\n' ;;
+    *sys*|*system*)         printf '5 80 520 580 320\n' ;;
+    *foot*)                 printf '1 80 560 540 270\n' ;;
+    *) return 1 ;;
+  esac
+}
+
+focused_output_rect() {
+  swaymsg -t get_outputs -r 2>/dev/null | jq -r '
+    ([.[] | select(.focused)][0] // .[0]) as $o
+    | if $o == null then "0 0 1600 900"
+      else "\($o.rect.x) \($o.rect.y) \($o.rect.width) \($o.rect.height)" end
+  '
+}
+
+scale_geometry() {
+  local bx="$1" by="$2" bw="$3" bh="$4" ox="$5" oy="$6" ow="$7" oh="$8"
+  local x y w h margin=12
+  x=$((ox + bx * ow / 1600))
+  y=$((oy + by * oh / 900))
+  w=$((bw * ow / 1600))
+  h=$((bh * oh / 900))
+
+  # Keep our authored rectangles completely inside the current output.
+  [ "$w" -gt $((ow - margin * 2)) ] && w=$((ow - margin * 2))
+  [ "$h" -gt $((oh - margin * 2)) ] && h=$((oh - margin * 2))
+  [ "$x" -lt $((ox + margin)) ] && x=$((ox + margin))
+  [ "$y" -lt $((oy + margin)) ] && y=$((oy + margin))
+  [ $((x + w)) -gt $((ox + ow - margin)) ] && x=$((ox + ow - margin - w))
+  [ $((y + h)) -gt $((oy + oh - margin)) ] && y=$((oy + oh - margin - h))
+  printf '%s %s %s %s\n' "$x" "$y" "$w" "$h"
+}
+
+place_window() {
+  local id="$1" json app cls name key ws bx by bw bh ox oy ow oh x y w h mainws
+  json="$(query_window "$id")" || return 0
+  app="$(jq -r '.app' <<<"$json")"
+  cls="$(jq -r '.cls' <<<"$json")"
+  name="$(jq -r '.name' <<<"$json")"
+
+  # Dialogs/plugins never inherit a workspace policy from their parent class.
+  # Float at natural size and centre them where they were created.
+  if child_or_dialog "$json"; then
+    swaymsg "[con_id=$id] floating enable, border none, move position center" >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  if mainws="$(main_workspace "$app" "$cls" "$name")"; then
+    swaymsg "[con_id=$id] move container to workspace number $mainws, floating disable, border none, fullscreen enable" >/dev/null 2>&1 || true
+    swaymsg "workspace number $mainws" >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  key=" ${app,,} ${cls,,} ${name,,} "
+  if read -r ws bx by bw bh < <(utility_geometry "$key"); then
+    read -r ox oy ow oh < <(focused_output_rect)
+    : "${ox:=0}"; : "${oy:=0}"; : "${ow:=1600}"; : "${oh:=900}"
+    read -r x y w h < <(scale_geometry "$bx" "$by" "$bw" "$bh" "$ox" "$oy" "$ow" "$oh")
+
+    # Workspace 0 means "stay where the dialog was requested" (PolicyKit).
+    if [ "$ws" -gt 0 ]; then
+      swaymsg "[con_id=$id] move container to workspace number $ws, floating enable, border none, resize set $w $h, move position $x $y" >/dev/null 2>&1 || true
+      swaymsg "workspace number $ws" >/dev/null 2>&1 || true
+    else
+      swaymsg "[con_id=$id] floating enable, border none, resize set $w $h, move position center" >/dev/null 2>&1 || true
+    fi
+    return 0
+  fi
+
+  # Unknown applications are not forced into a made-up workspace or geometry.
+  # They simply remain borderless. If the app maps as floating, centre it; if it
+  # maps tiled, leave its layout decision alone.
+  swaymsg "[con_id=$id] border none" >/dev/null 2>&1 || true
+}
+
+promote_main_if_needed() {
+  local id="$1" json app cls name mainws
+  json="$(query_window "$id")" || return 0
+  child_or_dialog "$json" && return 0
+  app="$(jq -r '.app' <<<"$json")"
+  cls="$(jq -r '.cls' <<<"$json")"
+  name="$(jq -r '.name' <<<"$json")"
+  if mainws="$(main_workspace "$app" "$cls" "$name")"; then
+    swaymsg "[con_id=$id] move container to workspace number $mainws, floating disable, border none, fullscreen enable" >/dev/null 2>&1 || true
+  fi
+}
+
+case "${1:-}" in
+  --place-id)
+    [[ "${2:-}" =~ ^[0-9]+$ ]] || { echo 'usage: rice-window-placement --place-id CON_ID' >&2; exit 2; }
+    place_window "$2"
+    exit 0
+    ;;
+  --promote-id)
+    [[ "${2:-}" =~ ^[0-9]+$ ]] || { echo 'usage: rice-window-placement --promote-id CON_ID' >&2; exit 2; }
+    promote_main_if_needed "$2"
+    exit 0
+    ;;
+esac
+
+# Event-driven only: no polling and no compositor plugin.
+swaymsg -m -t subscribe '["window"]' | while IFS= read -r event; do
+  change="$(jq -r '.change // ""' <<<"$event" 2>/dev/null || true)"
+  id="$(jq -r '.container.id // empty' <<<"$event" 2>/dev/null || true)"
+  [[ "$id" =~ ^[0-9]+$ ]] || continue
+  case "$change" in
+    new)
+      ( sleep 0.10; place_window "$id" ) &
+      ;;
+    title)
+      # Title changes may reveal that an XWayland REAPER window is the main
+      # project window. Never reposition ordinary utilities on title changes.
+      ( sleep 0.03; promote_main_if_needed "$id" ) &
+      ;;
+  esac
+done
