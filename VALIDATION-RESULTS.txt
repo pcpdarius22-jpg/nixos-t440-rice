@@ -1,0 +1,121 @@
+v12 RC7 pre-install static/regression validation
+
+Shell syntax
+OK   bash: install-clean.sh
+OK   bash: validate-clean.sh
+OK   bash: user/scripts/audio-lowlatency
+OK   bash: user/scripts/audio-normal
+OK   bash: user/scripts/audio-safe
+OK   bash: user/scripts/flatpak-bootstrap
+OK   bash: user/scripts/nix-apply
+OK   bash: user/scripts/nix-rollback
+OK   bash: user/scripts/nix-snapshot
+OK   bash: user/scripts/nix-sync
+OK   bash: user/scripts/nix-test
+OK   bash: user/scripts/reaper-pw
+OK   bash: user/scripts/rice-check
+OK   bash: user/scripts/rice-clipboard
+OK   bash: user/scripts/rice-doctor
+OK   bash: user/scripts/rice-fetch
+OK   bash: user/scripts/rice-foot
+OK   bash: user/scripts/rice-plumb
+OK   bash: user/scripts/rice-polkit-agent
+OK   bash: user/scripts/rice-session
+OK   bash: user/scripts/rice-status
+OK   bash: user/scripts/rice-window-placement
+OK   bash: user/scripts/rice-windows
+OK   bash: user/scripts/rice-yazi
+OK   bash: user/scripts/set-wallpaper
+OK   bash: user/scripts/theme-sync
+OK   bash: user/scripts/wallpaper-menu
+
+Clean-install safety
+OK   system stateVersion 26.05
+OK   home stateVersion 26.05
+OK   hardware config is deliberate failing placeholder
+OK   real flake check happens before installation
+OK   whole-disk target type guard
+OK   removable/live-USB erase guard
+OK   ext4 root reserves 1%, not wasteful default 5%
+OK   bootstrap Git remote stripped before local baseline
+OK   local Git baseline created
+OK   tty autologin limited to first tty/once per boot
+OK   five visible boot generations
+OK   eight system generations retained before GC
+
+Performance / resource policy
+OK   unused systemd-oomd daemon disabled
+OK   Haswell governor uses schedutil
+OK   balanced Intel energy policy
+OK   bitmap font limited to monospace/UI use
+OK   modest 25% zram safety net
+OK   unused VDPAU bridge removed
+
+Audio profile
+OK   studio quantum 512
+OK   safe quantum 1024
+OK   PipeWire default follows studio setting
+OK   32-bit ALSA + JACK compatibility present
+OK   reaper-pw forces 512 and restores graph
+OK   reaper-pw 1024 fallback
+
+Minimal application profile / sandboxing
+OK   default: cliphist
+OK   default: htop
+OK   default: yazi
+OK   qpwgraph remains opt-in
+OK   not default: cmus
+OK   not default: btop
+OK   not default: senpai
+OK   not default: transmission_4
+OK   not default: tremc
+OK   not default: fastfetch
+OK   not default: lazygit
+OK   not default: lynx
+OK   not default: zoxide
+OK   not default: sox
+OK   not default: swappy
+OK   Flatseal not preinstalled
+OK   RetroArch bootstrap is manual; no first-login background download
+OK   no global GTK filesystem permission for Flatpaks
+OK   RetroArch sandbox narrowed to Games directory
+
+Window/workspace policy
+OK   touchpad DWT disabled for DAW input
+OK   placement is deterministic, not random
+OK   placement service supervised
+OK   workspace model documented in Sway config
+OK   htop launcher is monochrome
+OK   tmux removed from minimal base
+OK   editor uses deterministic upper-right canvas slot on workspace 1
+OK   qutebrowser -> workspace 2 fullscreen
+OK   REAPER plugin keeps natural size and centers
+OK   REAPER main -> workspace 3 fullscreen
+OK   media/document -> workspace 4 fullscreen
+OK   system tool -> workspace 5 authored slot
+OK   unknown app is not forced into guessed geometry/workspace
+
+Theme / browser media / bars
+OK   qutebrowser forced dark renderer disabled
+OK   PDF content recoloring disabled
+OK   Fuzzel square border syntax
+OK   strict grayscale palette
+OK   bundled painting is pre-cropped exactly to 1600x900
+OK   host UI source contains no non-grayscale hex colors
+OK   clean-install theme has no stale migration path
+OK   generated Waybar JSON parses
+OK   bars remain clock only + workspace/battery/RAM only
+OK   black underlay exists only on clock/status text blocks
+OK   generated Yazi TOML parses
+OK   Fuzzel radius zero
+OK   web media CSS has no recolor filters
+OK   GTK3/4 square CSS
+
+Change / rollback workflow
+OK   nix-test activates temporary generation then checks it
+OK   nix-apply checks after switch
+OK   generation rollback helper
+OK   source checkpoint helper
+INFO Full Nix evaluation is intentionally deferred: the download ships an invalid hardware placeholder. install-clean.sh replaces it with the target T440 config and runs nix flake check before nixos-install.
+
+ALL AVAILABLE STATIC/HELPER TESTS PASSED
