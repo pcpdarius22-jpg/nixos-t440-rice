@@ -1,0 +1,7 @@
+Reference wallpaper for the v12 RC7 clean-install package
+
+This is the user-supplied 1881 painting selected for the rice. RC7 stores a
+1600x900 centre crop so the T440 panel renders it 1:1 without runtime cropping.
+The configuration does not assert ownership or licensing of the source image;
+the bundled copy is included for this user's personal configuration. Replace it
+at any time with Super+W / wallpaper-menu or `set-wallpaper /path/to/image`.
