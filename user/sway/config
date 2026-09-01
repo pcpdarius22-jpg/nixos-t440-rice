@@ -1,0 +1,170 @@
+# v12 clean-install RC7 — ThinkPad T440 dark-minimal Sway music workstation
+# Original-rice structure: sparse edge text, black square windows, full-color
+# wallpaper/content. Main content apps use dedicated workspaces; utilities occupy art-directed free-space zones.
+
+include /etc/sway/config.d/*
+
+set $mod Mod4
+set $home /home/sloth
+set $term rice-foot
+set $menu fuzzel --config $home/.config/rice/generated/fuzzel.ini
+
+font pango:PxPlus IBM VGA 8x16 10
+floating_modifier $mod normal
+focus_follows_mouse no
+mouse_warping none
+workspace_auto_back_and_forth yes
+focus_on_window_activation smart
+
+# Hard visual invariant: no compositor titlebars, no rounded decorations.
+default_border none
+default_floating_border none
+gaps inner 0
+gaps outer 0
+smart_gaps on
+workspace_layout default
+default_orientation auto
+
+include $home/.config/rice/generated/sway-colors.conf
+
+input type:touchpad {
+    tap enabled
+    # DAW use often needs keyboard notes/shortcuts and touchpad motion together.
+    dwt disabled
+    middle_emulation enabled
+    natural_scroll disabled
+}
+input type:keyboard {
+    xkb_layout us
+}
+
+output * bg $home/.local/share/rice/wallpaper.jpg fill
+
+# One shared Foot server saves memory; rice-foot falls back if it is unavailable.
+exec foot --server
+
+# Flatpak bootstrap is deliberately manual. First boot should not begin a large
+# runtime download in the background while the workstation is being validated.
+# Run `flatpak-bootstrap` once when you actually want RetroArch.
+
+# --- launchers -------------------------------------------------------------
+bindsym $mod+Return exec $term
+bindsym $mod+d exec $menu
+bindsym $mod+b exec qutebrowser
+bindsym $mod+e exec rice-foot -a editor -T nvim nvim
+bindsym $mod+y exec rice-foot -a yazi -T yazi rice-yazi
+bindsym $mod+x exec rice-foot -a htop -T htop htop -C
+bindsym $mod+r exec reaper-pw
+# Heavy project fallback: same REAPER path, forced 1024-frame quantum.
+bindsym $mod+Shift+r exec env RICE_AUDIO_QUANTUM=1024 reaper-pw
+bindsym $mod+w exec wallpaper-menu
+bindsym $mod+Shift+w exec rice-foot -a nmtui -T network nmtui
+bindsym $mod+Shift+b exec blueman-manager
+bindsym $mod+Shift+a exec rice-foot -a audio -T audio pulsemixer
+bindsym $mod+Shift+f exec rice-foot -a sys -T system bash -lc 'rice-fetch; exec bash'
+
+# --- window/workflow -------------------------------------------------------
+bindsym $mod+h focus left
+bindsym $mod+j focus down
+bindsym $mod+k focus up
+bindsym $mod+l focus right
+bindsym $mod+Left focus left
+bindsym $mod+Down focus down
+bindsym $mod+Up focus up
+bindsym $mod+Right focus right
+
+bindsym $mod+Shift+h move left 20 px
+bindsym $mod+Shift+j move down 20 px
+bindsym $mod+Shift+k move up 20 px
+bindsym $mod+Shift+l move right 20 px
+bindsym $mod+Shift+Left move left 20 px
+bindsym $mod+Shift+Down move down 20 px
+bindsym $mod+Shift+Up move up 20 px
+bindsym $mod+Shift+Right move right 20 px
+
+bindsym $mod+Control+h resize shrink width 20 px
+bindsym $mod+Control+l resize grow width 20 px
+bindsym $mod+Control+k resize shrink height 20 px
+bindsym $mod+Control+j resize grow height 20 px
+
+# Art-directed placement is automatic for known apps. These remain manual
+# overrides when you want to move a window yourself, rio-style.
+bindsym $mod+space floating toggle
+bindsym $mod+Control+space focus mode_toggle
+bindsym $mod+c move position center
+bindsym $mod+Shift+c move position cursor
+bindsym $mod+f fullscreen toggle
+bindsym $mod+q kill
+bindsym $mod+Tab focus next
+bindsym $mod+Shift+Tab focus prev
+bindsym $mod+a focus parent
+
+# On-demand tools instead of a taskbar/dashboard.
+bindsym $mod+o exec rice-windows
+bindsym $mod+v exec rice-clipboard pick
+bindsym $mod+p exec rice-plumb
+
+bindsym $mod+1 workspace number 1
+bindsym $mod+2 workspace number 2
+bindsym $mod+3 workspace number 3
+bindsym $mod+4 workspace number 4
+bindsym $mod+5 workspace number 5
+bindsym $mod+Shift+1 move container to workspace number 1
+bindsym $mod+Shift+2 move container to workspace number 2
+bindsym $mod+Shift+3 move container to workspace number 3
+bindsym $mod+Shift+4 move container to workspace number 4
+bindsym $mod+Shift+5 move container to workspace number 5
+
+# 9front/rio-inspired Hide/Unhide using Sway's native scratchpad.
+bindsym $mod+Shift+minus move scratchpad
+bindsym $mod+minus scratchpad show
+
+# DAW passthrough: compositor bindings stop consuming normal shortcuts so the
+# focused DAW gets them. Any of these shortcuts exits the mode.
+mode "passthrough" {
+    bindsym $mod+F12 mode "default"
+    bindsym $mod+Pause mode "default"
+    bindsym $mod+Escape mode "default"
+}
+bindsym $mod+F12 mode "passthrough"
+bindsym $mod+Pause mode "passthrough"
+
+bindsym $mod+Control+r reload
+bindsym $mod+Shift+n exec notify-send 'what a notification!' 'merc: true lol'
+bindsym $mod+Escape exec swaylock -f -c 000000
+bindsym $mod+Shift+s exec swaylock -f -c 000000 && systemctl suspend
+bindsym $mod+Shift+e exec swaynag -t warning -m 'Exit Sway and return to tty1?' -B 'Yes, exit' 'swaymsg exit'
+
+# --- hardware --------------------------------------------------------------
+bindsym --locked XF86AudioRaiseVolume exec wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+
+bindsym --locked XF86AudioLowerVolume exec wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+bindsym --locked XF86AudioMute exec wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+bindsym --locked XF86AudioPlay exec playerctl play-pause
+bindsym --locked XF86AudioNext exec playerctl next
+bindsym --locked XF86AudioPrev exec playerctl previous
+bindsym --locked XF86AudioMicMute exec wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle
+bindsym --locked XF86MonBrightnessUp exec brightnessctl set +10%
+bindsym --locked XF86MonBrightnessDown exec brightnessctl set 10%-
+
+bindsym Print exec grim -g "$(slurp)" - | wl-copy
+bindsym $mod+Print exec mkdir -p ~/Pictures/Screenshots && grim ~/Pictures/Screenshots/$(date +%Y-%m-%d_%H-%M-%S).png
+
+exec swayidle -w \
+    timeout 600 'swaylock -f -c 000000' \
+    timeout 900 'swaymsg "output * power off"' \
+    resume 'swaymsg "output * power on"' \
+    before-sleep 'swaylock -f -c 000000'
+
+# Restart generated edge text / notifications and ensure live-rebuild services
+# are running after a config reload.
+exec_always rice-session
+
+# Music playback/rendering should not blank the display while REAPER or FL Studio
+# is actually focused.
+for_window [app_id="reaper"] inhibit_idle focus
+for_window [class="REAPER"] inhibit_idle focus
+for_window [title=".*FL Studio.*"] inhibit_idle focus
+
+# Authentication is a utility/dialog; the placement service centers it.
+for_window [app_id="lxqt-policykit-agent"] floating enable, border none
+for_window [class="lxqt-policykit-agent"] floating enable, border none
